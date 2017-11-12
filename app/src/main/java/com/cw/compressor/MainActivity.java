@@ -9,42 +9,41 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.cw.library.compressor.CompressConfig;
 import com.cw.library.compressor.ImageCompressor;
 
-import java.io.File;
-
 public class MainActivity extends AppCompatActivity {
 
     private static final int RESULT_PICK_IMAGE = 200;//选择图片后的结果码
-    //总文件夹路径
-    private static String sDir = Environment.getExternalStorageDirectory().getPath() + "/takePhotoUtils/img/";
-    //文件夹路径
-    private String mPath = sDir + System.currentTimeMillis() + "/";
 
     private ImageCompressor mImageCompressor;
     private ImageView iv_content;
+    private ProgressBar pb_progress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        iv_content = (ImageView) findViewById(R.id.iv_content);
+        pb_progress = (ProgressBar) findViewById(R.id.pb_progress);
 
         mImageCompressor = new ImageCompressor.Builder(getApplication())
                 //WebP是google开发的一种旨在加快图片加载速度的图片格式
                 .setCompressFormat(CompressConfig.COMPRESS_WEBP)
-                .setMaxX(1028)
-                .setMaxY(1028)
+                .setMaxWidth(1028)
+                .setMaxHeight(1028)
                 .setMaxSize(700)
-                .setOpenProcess(false)
+                .setDestinationDir(Environment.getExternalStorageDirectory().getPath() + "/cw/image/")
+                //开启压缩进程后需要在合适的地方通过stopCompressProcess关闭进程
+                .startCompressProcess()
                 .build();
 
-        iv_content = (ImageView) findViewById(R.id.iv_content);
+        //选择图片
         findViewById(R.id.bt_select).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -56,7 +55,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mImageCompressor.recycle();
+        //关闭进程(如果没有开启不需要关闭)
+        mImageCompressor.stopCompressProcess();
     }
 
     @Override
@@ -65,15 +65,20 @@ public class MainActivity extends AppCompatActivity {
         if (resultCode != Activity.RESULT_OK) {
             return;
         }
-        if (!makeDirs(mPath)) {
-            Log.i("TakePhotoUtils", mPath + "Directory not find");
-            return;
-        }
 
         String pickPhotoPath = getPickPhotoPath(this, data);
-        String compressPath = mPath + System.currentTimeMillis() + "compress.webp";
+        mImageCompressor.compress(pickPhotoPath, new ImageCompressor.CompressImageListener() {
 
-        mImageCompressor.compress(pickPhotoPath, compressPath, new ImageCompressor.CompressImageListener() {
+            @Override
+            public void onCompressStart(String basePath) {
+                pb_progress.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onCompressFinish(String basePath) {
+                pb_progress.setVisibility(View.GONE);
+            }
+
             @Override
             public void onCompressSuccess(String basePath, String imgPath) {
                 iv_content.setImageURI(Uri.parse("file://" + imgPath));
@@ -118,21 +123,4 @@ public class MainActivity extends AppCompatActivity {
         return "";
     }
 
-    private static boolean makeDirs(String filePath) {
-        String folderName = getFolderName(filePath);
-        if (folderName == null || folderName.length() == 0) {
-            return false;
-        }
-
-        File folder = new File(folderName);
-        return (folder.exists() && folder.isDirectory()) || folder.mkdirs();
-    }
-
-    private static String getFolderName(String filePath) {
-        if (filePath == null || filePath.length() == 0) {
-            return filePath;
-        }
-        int filePosi = filePath.lastIndexOf(File.separator);
-        return (filePosi == -1) ? "" : filePath.substring(0, filePosi);
-    }
 }

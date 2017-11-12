@@ -29,6 +29,7 @@ import com.cw.library.compressor.utils.ThreadPoolManager;
 import com.cw.library.compressor.utils.Utils;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
@@ -68,7 +69,6 @@ public class ImageCompressor {
         this.mConfig = new CompressConfig();
     }
 
-
     public static class Builder {
 
         private ImageCompressor mImageCompressor;
@@ -88,16 +88,16 @@ public class ImageCompressor {
         /**
          * 设置图片最大高度（px）
          */
-        public Builder setMaxX(int maxX) {
-            mImageCompressor.setMaxX(maxX);
+        public Builder setMaxWidth(int width) {
+            mImageCompressor.setMaxWidth(width);
             return this;
         }
 
         /**
          * 设置图片最大宽度（px）
          */
-        public Builder setMaxY(int maxY) {
-            mImageCompressor.setMaxY(maxY);
+        public Builder setMaxHeight(int height) {
+            mImageCompressor.setMaxHeight(height);
             return this;
         }
 
@@ -113,17 +113,22 @@ public class ImageCompressor {
         }
 
         /**
-         * 是否使用多进程压缩
+         * 压缩目标文件夹
          */
-        public Builder setOpenProcess(boolean openProcess) {
-            mImageCompressor.setOpenProcess(openProcess);
+        public Builder setDestinationDir(String path) {
+            mImageCompressor.setDestinationDir(path);
+            return this;
+        }
+
+        /**
+         * 开启多进程压缩 （开启后需要在合适的地方通过stopCompressProcess关闭进程）
+         */
+        public Builder startCompressProcess() {
+            mImageCompressor.startCompressProcess();
             return this;
         }
 
         public ImageCompressor build() {
-            if (mImageCompressor.getConfig().isOpenProcess()) {
-                mImageCompressor.bindCompressService();
-            }
             return mImageCompressor;
         }
     }
@@ -134,15 +139,15 @@ public class ImageCompressor {
         }
     }
 
-    public void setMaxX(int maxX) {
+    public void setMaxWidth(int width) {
         if (mConfig != null) {
-            mConfig.setMaxX(maxX);
+            mConfig.setMaxX(width);
         }
     }
 
-    public void setMaxY(int maxY) {
+    public void setMaxHeight(int height) {
         if (mConfig != null) {
-            mConfig.setMaxY(maxY);
+            mConfig.setMaxY(height);
         }
     }
 
@@ -152,31 +157,41 @@ public class ImageCompressor {
         }
     }
 
-    public void setOpenProcess(boolean openProcess) {
+    public void setDestinationDir(String path) {
         if (mConfig != null) {
-            mConfig.setOpenProcess(openProcess);
+            mConfig.setDestinationDir(path);
         }
     }
 
-    public CompressConfig getConfig() {
-        return mConfig;
+    /**
+     * 开启多进程压缩
+     */
+    public void startCompressProcess() {
+        if (mConfig != null) {
+            mConfig.setOpenProcess(true);
+            bindCompressService();
+        }
     }
 
-    public void recycle() {
+    /**
+     * 关闭释放压缩进程
+     */
+    public void stopCompressProcess() {
         unBindCompressService();
         mServiceConnection = null;
     }
 
-    public void compress(final String basePath, final String compressPath, final CompressImageListener listener) {
+    public void compress(final String basePath, final CompressImageListener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("CompressImageListener can not be null");
         }
         if (mConfig == null) {
             throw new IllegalArgumentException("CompressConfig can not be null");
         }
+        listener.onCompressStart(basePath);
         if (mConfig.isOpenProcess() && mService != null && isServiceRunning(CompressorService.class)) {
             try {
-                mService.compress(basePath, compressPath
+                mService.compress(basePath, mConfig.getDestinationDir()
                         , mConfig.getMaxSize(), mConfig.getMaxX()
                         , mConfig.getMaxY(), mConfig.getCompressFormat()
                         , new ICompressCallback.Stub() {
@@ -191,6 +206,7 @@ public class ImageCompressor {
                                         } else {
                                             listener.onCompressFailed(basePath);
                                         }
+                                        listener.onCompressFinish(basePath);
                                     }
                                 });
                             }
@@ -204,7 +220,7 @@ public class ImageCompressor {
         ThreadPoolManager.getThreadProxyPool(1, 1, 0L).excute(new Runnable() {
             @Override
             public void run() {
-                final String path = compressImage(basePath, compressPath
+                final String path = compressImage(basePath, mConfig.getDestinationDir()
                         , mConfig.getMaxSize(), mConfig.getMaxX(), mConfig.getMaxY(), mConfig.getCompressFormat());
                 UIHandle.post(new Runnable() {
                     @Override
@@ -215,6 +231,7 @@ public class ImageCompressor {
                         } else {
                             listener.onCompressFailed(basePath);
                         }
+                        listener.onCompressFinish(basePath);
                     }
                 });
             }
@@ -251,28 +268,38 @@ public class ImageCompressor {
     /**
      * 图片压缩
      *
-     * @param basePath       原图路径
-     * @param compressPath   压缩后存放路径
-     * @param maxSize        压缩后图片最大大小（k）
-     * @param maxX           压缩后图片宽最大尺寸（px）
-     * @param maxY           压缩后图片高最大尺寸（px）
-     * @param compressFormat 压缩后图片格式
+     * @param basePath        原图路径
+     * @param compressDirPath 压缩后存放路径
+     * @param maxSize         压缩后图片最大大小（k）
+     * @param maxX            压缩后图片宽最大尺寸（px）
+     * @param maxY            压缩后图片高最大尺寸（px）
+     * @param compressFormat  压缩后图片格式
      * @return 压缩后存放路径（压缩失败返回为空字符串）
      */
-    public static String compressImage(String basePath, String compressPath
+    public static String compressImage(String basePath, String compressDirPath
             , int maxSize, int maxX, int maxY, int compressFormat) {
 
+        //创建文件名
         Bitmap.CompressFormat format = Bitmap.CompressFormat.JPEG;
+        String compressPath = compressDirPath + System.currentTimeMillis() + "_compress";
         switch (compressFormat) {
             case COMPRESS_JPEG:
                 format = Bitmap.CompressFormat.JPEG;
+                compressPath += ".jpg";
                 break;
             case COMPRESS_PNG:
                 format = Bitmap.CompressFormat.PNG;
+                compressPath += ".png";
                 break;
             case COMPRESS_WEBP:
                 format = Bitmap.CompressFormat.WEBP;
+                compressPath += ".webp";
                 break;
+        }
+        //创建文件夹
+        if (!makeDirs(compressPath)) {
+            Log.i("ImageCompressor", compressPath + "Directory not find");
+            return "";
         }
 
         int quality = 100;
@@ -288,7 +315,7 @@ public class ImageCompressor {
                 int i = (baos.toByteArray().length / 1024 - maxSize) / 200;
                 quality -= i > 0 ? i : 1;
                 baos.reset();
-                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                bitmap.compress(format, quality, baos);
             }
             FileOutputStream out = new FileOutputStream(compressPath);
             baos.writeTo(out);
@@ -344,22 +371,73 @@ public class ImageCompressor {
         return inSampleSize;
     }
 
+    private static boolean makeDirs(String filePath) {
+        String folderName = getFolderName(filePath);
+        if (folderName == null || folderName.length() == 0) {
+            return false;
+        }
+
+        File folder = new File(folderName);
+        return (folder.exists() && folder.isDirectory()) || folder.mkdirs();
+    }
+
+    private static String getFolderName(String filePath) {
+        if (filePath == null || filePath.length() == 0) {
+            return filePath;
+        }
+        int filePosi = filePath.lastIndexOf(File.separator);
+        return (filePosi == -1) ? "" : filePath.substring(0, filePosi);
+    }
+
+    private static boolean deleteDir(String path) {
+        File dir = new File(path);
+        if (dir.isDirectory()) {
+            String[] children = dir.list();
+            for (String file : children) {
+                boolean success = deleteDir(file);
+                if (!success) {
+                    return false;
+                }
+            }
+        }
+        // 目录此时为空，可以删除
+        return dir.delete();
+    }
+
     /**
      * 压缩监听
      */
-    public interface CompressImageListener {
+    public static abstract class CompressImageListener {
+
         /**
          * 压缩成功
          *
          * @param imgPath 压缩图片的路径
          */
-        void onCompressSuccess(String basePath, String imgPath);
+        public abstract void onCompressSuccess(String basePath, String imgPath);
 
         /**
          * 压缩失败
          *
          * @param basePath 压缩失败的原图
          */
-        void onCompressFailed(String basePath);
+        public void onCompressFailed(String basePath) {
+        }
+
+        /**
+         * 压缩开始
+         *
+         * @param basePath 原图路径
+         */
+        public void onCompressStart(String basePath) {
+        }
+
+        /**
+         * 压缩结束
+         *
+         * @param basePath 原图路径
+         */
+        public void onCompressFinish(String basePath) {
+        }
     }
 }

@@ -11,6 +11,8 @@
 
 package com.cw.library.compressor;
 
+import android.os.Environment;
+
 /**
  * @author Cw
  * @date 17/8/15
@@ -30,7 +32,7 @@ public class CompressConfig {
     /**
      * 压缩到的最大大小，单位KB
      */
-    private int mMaxSize = 700;
+    private int mMaxSize = 1024 * 10;
 
     /**
      * 压缩格式
@@ -41,6 +43,11 @@ public class CompressConfig {
      * 是否开启多进程
      */
     private boolean mIsOpenProcess = false;
+
+    /**
+     * 压缩目标文件夹
+     */
+    private String mDestinationDir = Environment.getExternalStorageDirectory().getPath() + "/takePhotoUtils/image/";
 
     public int getMaxX() {
         return mMaxX;
@@ -82,6 +89,14 @@ public class CompressConfig {
 
     public void setOpenProcess(boolean openProcess) {
         mIsOpenProcess = openProcess;
+    }
+
+    public String getDestinationDir() {
+        return mDestinationDir;
+    }
+
+    public void setDestinationDir(String destinationDir) {
+        mDestinationDir = destinationDir;
     }
 
 }
