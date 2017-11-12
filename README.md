@@ -8,36 +8,31 @@
 #### 1.初始化
 ```
 ImageCompressor imageCompressor = new ImageCompressor.Builder(context)
-        .setCompressFormat(CompressConfig.COMPRESS_WEBP)//压缩格式jpeg等
-        .setMaxX(1028)//压缩后最大宽度（px）
-        .setMaxY(1028)//压缩后最大高度（px）
-        .setMaxSize(700)//压缩后最大大小（k）
-        .setOpenProcess(true)//是否开启压缩进程
-        .build();
+                .setCompressFormat(CompressConfig.COMPRESS_WEBP)
+                .setMaxWidth(1028)
+                .setMaxHeight(1028)
+                .setMaxSize(700)
+                .setDestinationDir("压缩图片保存的文件夹(有默认)")
+                .startCompressProcess()//开启多进程压缩模式
+                .build();
 ```
 #### 2.压缩图片
 ```
-imageCompressor.compress(pickPhotoPath, compressPath
-                    , new ImageCompressor.CompressImageListener() {
-    @Override
-    public void onCompressSuccess(String basePath, String imgPath) {
-        //压缩成功
-        imageView.setImageURI(Uri.parse("file://" + imgPath));
-    }
-
-    @Override
-    public void onCompressFailed(String basePath) {
-        //压缩失败
-    }
-});
+imageCompressor.compress(pickPhotoPath, new ImageCompressor.CompressImageListener() {
+            @Override
+            public void onCompressSuccess(String basePath, String imgPath) {
+                iv_content.setImageURI(Uri.parse("file://" + imgPath));
+            }
+        });
 ```
-#### 3.释放资源
->这里的释放资源其实是解绑压缩图片的服务进程，如果没有开启setOpenProcess(true)则不需要释放。如果不解绑服务进程也不会影响程序运行。
+#### 3.关闭进程
+>解绑压缩图片的服务进程，如果没有开启startCompressProcess则不需要释放。如果不解绑服务进程也不会影响程序运行。
 
 ```
 @Override
 protected void onDestroy() {
     super.onDestroy();
-    imageCompressor.recycle();
+        //关闭进程(如果没有开启不需要关闭)
+        mImageCompressor.stopCompressProcess();
 }
 ```
